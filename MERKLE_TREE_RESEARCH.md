@@ -595,3 +595,25 @@ Binary Merkle Trees with enhanced security measures provide:
 6. [Code4rena zkSync Audit](https://github.com/code-423n4/2022-10-zksync)
 
 *Research conducted October 2024. Regular updates recommended as field evolves.*
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

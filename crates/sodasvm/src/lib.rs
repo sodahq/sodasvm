@@ -7,9 +7,16 @@ use std::collections::HashMap;
 
 pub mod error;
 pub mod merkle;
+pub mod sequencer;
+pub mod emergency;
+pub mod demo;
+pub mod l1_client;
 
 pub use error::SodaSVMError;
 pub use merkle::{SodaMerkleTree, MerkleProof, AccountState};
+pub use sequencer::{Sequencer, StateCommitment};
+pub use emergency::{MockL1Contract, EmergencyWithdrawalSimulation};
+pub use l1_client::{L1Client, L1MerkleProof};
 
 pub struct SodaSVM {
     lite_svm: LiteSVM,
