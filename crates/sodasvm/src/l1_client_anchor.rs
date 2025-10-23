@@ -1,4 +1,5 @@
 use solana_client::rpc_client::RpcClient;
+use serde_json;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
@@ -6,33 +7,9 @@ use solana_sdk::{
     transaction::Transaction,
     commitment_config::CommitmentConfig,
 };
-use std::str::FromStr;
 use crate::MerkleProof;
-use borsh::{BorshSerialize, BorshDeserialize, to_vec};
-use solana_sha256_hasher::Hasher;
-
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub enum EmergencyInstruction {
-    InitializeContract,
-    PostStateRoot {
-        merkle_root: [u8; 32],
-        block_number: u64,
-    },
-    EmergencyWithdraw {
-        proof: L1MerkleProof,
-    },
-}
-
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct PostStateRootArgs {
-    pub merkle_root: [u8; 32],
-    pub block_number: u64,
-}
-
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
-pub struct EmergencyWithdrawArgs {
-    pub proof: L1MerkleProof,
-}
+use borsh::{BorshSerialize, BorshDeserialize};
+use std::str::FromStr;
 
 #[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
 pub struct L1MerkleProof {
@@ -57,51 +34,13 @@ impl From<MerkleProof> for L1MerkleProof {
     }
 }
 
-pub struct L1Client {
+pub struct L1ClientAnchor {
     pub rpc_client: RpcClient,
     pub program_id: Pubkey,
     pub authority: Keypair,
 }
 
-fn get_discriminator(instruction: &str) -> [u8; 8] {
-    match instruction {
-        "emergency_withdraw" => [239, 45, 203, 64, 150, 73, 218, 92],
-        "post_state_root" => [219, 218, 56, 232, 23, 15, 104, 16],
-        "initialize_contract" => [181, 192, 35, 141, 212, 113, 138, 94],
-        "deposit_usdc" => [242, 35, 198, 137, 82, 225, 242, 182],
-        _ => panic!("Unknown instruction: {}", instruction),
-    }
-}
-
-// spl token (busdc ) => deposits => 
-// tree analysis => depth => user id =>  shard the tree => 
-// simulate binary tree 
-// time lock in the contract 
-// use slot time ot simualte => 7days => 
-// 
-
-
-impl L1Client {
-    pub fn find_withdrawal_record_pda(
-        &self,
-        user_pubkey: &Pubkey,
-    ) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[
-                b"withdrawal",
-                user_pubkey.as_ref(),
-            ],
-            &self.program_id,
-        )
-    }
-
-    pub fn find_vault_pda(&self) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[b"emergency_vault"],
-            &self.program_id,
-        )
-    }
-
+impl L1ClientAnchor {
     pub fn new(rpc_url: &str, program_id: Pubkey, authority: Keypair) -> Self {
         let rpc_client = RpcClient::new_with_commitment(
             rpc_url.to_string(),
@@ -115,8 +54,22 @@ impl L1Client {
         }
     }
 
-    pub fn initialize_contract(&self, contract_account: &Keypair, usdc_mint: &Pubkey) -> Result<String, Box<dyn std::error::Error>> {
-        let discriminator = get_discriminator("initialize_contract");
+    fn get_anchor_discriminator(namespace: &str, name: &str) -> [u8; 8] {
+        let preimage = format!("{}:{}", namespace, name);
+        let mut hasher = solana_sdk::hash::Hasher::default();
+        hasher.hash(preimage.as_bytes());
+        let hash = hasher.result();
+        let mut discriminator = [0u8; 8];
+        discriminator.copy_from_slice(&hash.to_bytes()[..8]);
+        discriminator
+    }
+
+    pub async fn initialize_contract(
+        &self,
+        contract_account: &Keypair,
+        usdc_mint: &Pubkey,
+    ) -> std::result::Result<String, Box<dyn std::error::Error>> {
+        let discriminator = Self::get_anchor_discriminator("global", "initialize_contract");
         let mut instruction_data = discriminator.to_vec();
         instruction_data.extend_from_slice(&usdc_mint.to_bytes());
 
@@ -125,7 +78,7 @@ impl L1Client {
             accounts: vec![
                 AccountMeta::new(contract_account.pubkey(), true),
                 AccountMeta::new(self.authority.pubkey(), true),
-                AccountMeta::new_readonly(Pubkey::from_str("11111111111111111111111111111111").unwrap(), false),
+                AccountMeta::new_readonly(solana_sdk::system_program::id(), false),
             ],
             data: instruction_data,
         };
@@ -143,15 +96,15 @@ impl L1Client {
         Ok(signature.to_string())
     }
 
-    pub fn deposit_usdc(
+    pub async fn deposit_usdc(
         &self,
         user_keypair: &Keypair,
         user_usdc_account: &Pubkey,
         vault_usdc_account: &Pubkey,
         contract_account: &Pubkey,
         amount: u64,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        let discriminator = get_discriminator("deposit_usdc");
+    ) -> std::result::Result<String, Box<dyn std::error::Error>> {
+        let discriminator = Self::get_anchor_discriminator("global", "deposit_usdc");
         let mut instruction_data = discriminator.to_vec();
         instruction_data.extend_from_slice(&amount.to_le_bytes());
 
@@ -176,26 +129,21 @@ impl L1Client {
         );
 
         let signature = self.rpc_client.send_and_confirm_transaction(&transaction)?;
-        println!("L1: USDC deposit completed - {} tokens - {}", amount, signature);
+        println!("L1: USDC deposit - {} tokens - {}", amount, signature);
         Ok(signature.to_string())
     }
 
-    pub fn post_state_root_to_l1(
+    pub async fn post_state_root_to_l1(
         &self,
         state_account: &Keypair,
         contract_account: &Pubkey,
         merkle_root: [u8; 32],
         block_number: u64,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        let discriminator = get_discriminator("post_state_root");
-        let instruction_args = to_vec(&PostStateRootArgs {
-            merkle_root,
-            block_number,
-        })?;
-
-        let mut instruction_data = Vec::new();
-        instruction_data.extend_from_slice(&discriminator);
-        instruction_data.extend_from_slice(&instruction_args);
+    ) -> std::result::Result<String, Box<dyn std::error::Error>> {
+        let discriminator = Self::get_anchor_discriminator("global", "post_state_root");
+        let mut instruction_data = discriminator.to_vec();
+        instruction_data.extend_from_slice(&merkle_root);
+        instruction_data.extend_from_slice(&block_number.to_le_bytes());
 
         let instruction = Instruction {
             program_id: self.program_id,
@@ -203,7 +151,7 @@ impl L1Client {
                 AccountMeta::new(state_account.pubkey(), true),
                 AccountMeta::new(*contract_account, false),
                 AccountMeta::new(self.authority.pubkey(), true),
-                AccountMeta::new_readonly(Pubkey::from_str("11111111111111111111111111111111").unwrap(), false),
+                AccountMeta::new_readonly(solana_sdk::system_program::id(), false),
             ],
             data: instruction_data,
         };
@@ -217,11 +165,11 @@ impl L1Client {
         );
 
         let signature = self.rpc_client.send_and_confirm_transaction(&transaction)?;
-        println!("L1: State root posted on-chain - Block {} - {}", block_number, signature);
+        println!("L1: State root posted - Block {} - {}", block_number, signature);
         Ok(signature.to_string())
     }
-    
-    pub fn emergency_withdraw(
+
+    pub async fn emergency_withdraw(
         &self,
         state_account: &Pubkey,
         contract_account: &Pubkey,
@@ -229,23 +177,23 @@ impl L1Client {
         user_usdc_account: &Pubkey,
         vault_usdc_account: &Pubkey,
         proof: MerkleProof,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    ) -> std::result::Result<String, Box<dyn std::error::Error>> {
         let l1_proof = L1MerkleProof::from(proof);
+        let discriminator = Self::get_anchor_discriminator("global", "emergency_withdraw");
+        let proof_data = borsh::to_vec(&l1_proof)?;
 
-        let discriminator = get_discriminator("emergency_withdraw");
-        let instruction_args = to_vec(&EmergencyWithdrawArgs {
-            proof: l1_proof,
-        })?;
+        let mut instruction_data = discriminator.to_vec();
+        instruction_data.extend_from_slice(&proof_data);
 
-        let mut instruction_data = Vec::new();
-        instruction_data.extend_from_slice(&discriminator);
-        instruction_data.extend_from_slice(&instruction_args);
-
-        let (withdrawal_record_pda, _bump) = self.find_withdrawal_record_pda(
-            &user_keypair.pubkey(),
+        let (withdrawal_record_pda, _) = Pubkey::find_program_address(
+            &[b"withdrawal", user_keypair.pubkey().as_ref()],
+            &self.program_id,
         );
 
-        let (vault_authority, _) = Pubkey::find_program_address(&[b"vault_authority"], &self.program_id);
+        let (vault_authority, _) = Pubkey::find_program_address(
+            &[b"vault_authority"],
+            &self.program_id,
+        );
 
         let instruction = Instruction {
             program_id: self.program_id,
@@ -258,7 +206,7 @@ impl L1Client {
                 AccountMeta::new_readonly(vault_authority, false),
                 AccountMeta::new(withdrawal_record_pda, false),
                 AccountMeta::new_readonly(spl_token::id(), false),
-                AccountMeta::new_readonly(Pubkey::from_str("11111111111111111111111111111111").unwrap(), false),
+                AccountMeta::new_readonly(solana_sdk::system_program::id(), false),
             ],
             data: instruction_data,
         };
@@ -272,22 +220,30 @@ impl L1Client {
         );
 
         let signature = self.rpc_client.send_and_confirm_transaction(&transaction)?;
-        println!("L1: Emergency withdrawal executed on-chain - {}", signature);
+        println!("L1: Emergency withdrawal - {}", signature);
         Ok(signature.to_string())
     }
 
-    pub fn airdrop(&self, pubkey: &Pubkey, lamports: u64) -> Result<String, Box<dyn std::error::Error>> {
-        let signature = self.rpc_client.request_airdrop(pubkey, lamports)?;
-        self.rpc_client.confirm_transaction(&signature)?;
-        println!("L1: Airdrop completed - {} lamports to {}", lamports, pubkey);
-        Ok(signature.to_string())
+    pub async fn advance_time_slots(&self, slots: u64) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        // Get current slot
+        let current_slot = self.rpc_client.get_slot()?;
+        let target_slot = current_slot + slots;
+
+        println!("L1: Advancing time from slot {} to slot {} (+{} slots)", current_slot, target_slot, slots);
+
+        // Use Solana test validator's warp capability
+        // This works only on localnet/test validator
+        let params = serde_json::json!([target_slot]);
+        let _result: serde_json::Value = self.rpc_client.send(
+            solana_client::rpc_request::RpcRequest::Custom { method: "warpToSlot" },
+            params,
+        )?;
+
+        println!("L1: Time advanced successfully to slot {}", target_slot);
+        Ok(())
     }
 
-    pub fn get_balance(&self, pubkey: &Pubkey) -> Result<u64, Box<dyn std::error::Error>> {
-        Ok(self.rpc_client.get_balance(pubkey)?)
-    }
-
-    pub fn check_program_deployed(&self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub fn check_program_deployed(&self) -> std::result::Result<bool, Box<dyn std::error::Error>> {
         match self.rpc_client.get_account(&self.program_id) {
             Ok(account) if account.data.len() > 0 => {
                 println!("L1: Emergency program verified deployed at {}", self.program_id);
@@ -299,19 +255,5 @@ impl L1Client {
             }
             Err(e) => Err(Box::new(e)),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_l1_client_creation() {
-        let authority = Keypair::new();
-        let program_id = Pubkey::new_unique();
-
-        let client = L1Client::new("http://127.0.0.1:8899", program_id, authority);
-        assert_eq!(client.program_id, program_id);
     }
 }

@@ -73,11 +73,11 @@ impl Sequencer {
             match self.process_transaction() {
                 Ok(_) => {
                     if i % 10 == 0 {
-                        println!("📦 Processed {} transactions", i);
+                        println!(" Processed {} transactions", i);
                     }
                 }
                 Err(e) => {
-                    println!("❌ Error: {}", e);
+                    println!(" Error: {}", e);
                     break;
                 }
             }

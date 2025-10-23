@@ -11,16 +11,30 @@ pub mod sequencer;
 pub mod emergency;
 pub mod demo;
 pub mod l1_client;
+pub mod l1_client_anchor;
+pub mod bench;
+pub mod comprehensive_bench;
+pub mod analysis;
+pub mod sharding;
+pub mod token;
+pub mod timelock;
 
 pub use error::SodaSVMError;
-pub use merkle::{SodaMerkleTree, MerkleProof, AccountState};
+pub use merkle::{SodaMerkleTree, MerkleProof, AccountState as SodaAccountState};
 pub use sequencer::{Sequencer, StateCommitment};
 pub use emergency::{MockL1Contract, EmergencyWithdrawalSimulation};
 pub use l1_client::{L1Client, L1MerkleProof};
+pub use l1_client_anchor::L1ClientAnchor;
+pub use bench::{MerkleBenchmark, BenchmarkResults, ScalabilityLimits};
+pub use comprehensive_bench::{ComprehensiveBenchmark, BenchmarkConfig, PerformanceMetrics, ShardingAnalysis, ScalabilityBottlenecks};
+pub use analysis::{DepthAnalyzer, TreeCapacityAnalysis, FailurePoint};
+pub use sharding::{ShardingManager, ShardConfig, CrossShardTransaction, ShardingMetrics};
+pub use token::UsdcToken;
+pub use timelock::TimeLock;
 
 pub struct SodaSVM {
     lite_svm: LiteSVM,
-    user_accounts: HashMap<Pubkey, AccountState>,
+    user_accounts: HashMap<Pubkey, SodaAccountState>,
     latest_merkle_tree: Option<SodaMerkleTree>,
     last_commit_time: i64,
 }
@@ -76,7 +90,7 @@ impl SodaSVM {
     }
 
     pub fn generate_state_tree(&self) -> SodaMerkleTree {
-        let accounts: Vec<AccountState> = self.user_accounts.values().cloned().collect();
+        let accounts: Vec<SodaAccountState> = self.user_accounts.values().cloned().collect();
         SodaMerkleTree::new(accounts)
     }
 
@@ -104,7 +118,7 @@ impl SodaSVM {
     }
 
     pub fn register_user(&mut self, pubkey: Pubkey, balance: u64) {
-        let account_state = AccountState::new(
+        let account_state = SodaAccountState::new(
             pubkey,
             balance,
             0,

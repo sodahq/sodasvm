@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Token, TokenAccount, Mint, Transfer};
 
 declare_id!("BbYmwfjNKjLVKTV6qbWBj41toNPj9wY4Zicx8q63AMjr");
 
@@ -14,7 +14,7 @@ pub mod emergency_exit {
         contract.total_withdrawals = 0;
         contract.is_active = true;
         contract.usdc_mint = usdc_mint;
-        contract.time_lock_duration_slots = 1; // Very short for testing (was 151200 for 7 days)
+        contract.time_lock_duration_slots = 151200; // ~7 days at 400ms/slot
         contract.last_state_root_slot = 0;
 
         msg!("Emergency Exit Contract initialized with USDC mint: {}", usdc_mint);
@@ -94,12 +94,6 @@ pub mod emergency_exit {
         withdrawal_record.withdrawn = true;
         withdrawal_record.slot_withdrawn = clock.slot;
 
-        let seeds = &[
-            b"vault_authority".as_ref(),
-            &[ctx.bumps.vault_authority],
-        ];
-        let signer_seeds = &[&seeds[..]];
-
         let transfer_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             Transfer {
@@ -107,7 +101,7 @@ pub mod emergency_exit {
                 to: ctx.accounts.user_usdc_account.to_account_info(),
                 authority: ctx.accounts.vault_authority.to_account_info(),
             },
-            signer_seeds,
+            &[&[b"vault_authority", &[ctx.bumps.vault_authority]]],
         );
 
         token::transfer(transfer_ctx, proof.balance)?;

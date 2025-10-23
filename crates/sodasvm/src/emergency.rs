@@ -18,7 +18,7 @@ impl MockL1Contract {
     }
 
     pub fn post_state_root(&mut self, commitment: StateCommitment) {
-        println!("📋 L1: State root posted - Block {}", commitment.block_number);
+        println!(" L1: State root posted - Block {}", commitment.block_number);
         self.stored_roots.push(commitment);
     }
 
@@ -45,7 +45,7 @@ impl MockL1Contract {
         let withdraw_amount = proof.account_state.balance;
         self.withdrawn_users.push(user);
 
-        println!("💰 L1: Emergency withdrawal successful - {} lamports to {}",
+        println!(" L1: Emergency withdrawal successful - {} lamports to {}",
                 withdraw_amount, user);
 
         Ok(withdraw_amount)
@@ -68,16 +68,16 @@ impl EmergencyWithdrawalSimulation {
     }
 
     pub fn simulate_user_emergency_exit(&mut self, proof: MerkleProof, user: Pubkey) {
-        println!("\n🚨 EMERGENCY WITHDRAWAL SIMULATION");
+        println!("\n EMERGENCY WITHDRAWAL SIMULATION");
         println!("User {} attempting emergency exit", user);
 
         match self.l1_contract.emergency_withdraw(proof, user) {
             Ok(amount) => {
-                println!("✅ Emergency withdrawal successful!");
-                println!("💸 User recovered {} lamports", amount);
+                println!(" Emergency withdrawal successful!");
+                println!(" User recovered {} lamports", amount);
             }
             Err(e) => {
-                println!("❌ Emergency withdrawal failed: {}", e);
+                println!(" Emergency withdrawal failed: {}", e);
             }
         }
     }
@@ -88,14 +88,14 @@ impl EmergencyWithdrawalSimulation {
         state_commitments: Vec<StateCommitment>,
         proofs: Vec<MerkleProof>,
     ) {
-        println!("\n🎭 FULL EMERGENCY SCENARIO SIMULATION");
+        println!("\n FULL EMERGENCY SCENARIO SIMULATION");
         println!("========================================");
 
         for commitment in state_commitments {
             self.l1_contract.post_state_root(commitment);
         }
 
-        println!("\n💥 SodaSVM SEQUENCER CRASHED!");
+        println!("\n SodaSVM SEQUENCER CRASHED!");
         println!("Users must use emergency withdrawal...");
 
         for (i, (user, _)) in users.iter().enumerate() {
@@ -104,7 +104,7 @@ impl EmergencyWithdrawalSimulation {
             }
         }
 
-        println!("\n📊 Emergency Withdrawal Summary:");
+        println!("\n Emergency Withdrawal Summary:");
         println!("Total users recovered: {}", self.l1_contract.withdrawn_users.len());
     }
 }
@@ -112,7 +112,7 @@ impl EmergencyWithdrawalSimulation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Sequencer, AccountState};
+    use crate::{Sequencer, SodaAccountState};
 
     #[test]
     fn test_emergency_withdrawal_flow() {
@@ -152,7 +152,7 @@ mod tests {
 
         let fake_proof = MerkleProof {
             account_index: 0,
-            account_state: AccountState::new(user, 1000, 0, 0),
+            account_state: SodaAccountState::new(user, 1000, 0, 0),
             proof: vec![[0; 32]],
             root: [1; 32],
         };
