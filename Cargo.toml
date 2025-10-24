@@ -3,6 +3,7 @@ resolver = "2"
 members = ["crates/*"]
 exclude = ["crates/node-litesvm/tests/clock-example"]
 
+
 [workspace.package]
 version = "0.8.1"
 edition = "2021"
@@ -29,6 +30,7 @@ napi = { version = "3.2.4", default-features = false }
 napi-derive = "3.2.4"
 qualifier_attr = "0.2.2"
 serde = "1.0"
+sha3 = "0.10"
 smallvec = "1.13"
 solana-account = "3.0"
 solana-address-lookup-table-interface = "3.0"

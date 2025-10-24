@@ -1,0 +1,79 @@
+[package]
+name = "sodasvm"
+description = ""
+license.workspace = true
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "run_benchmarks"
+path = "../../src/bin/run_benchmarks.rs"
+
+[dependencies]
+litesvm = { path = "../litesvm" }
+solana-account.workspace = true
+solana-hash.workspace = true
+sha3.workspace = true
+serde.workspace = true
+solana-transaction.workspace = true
+solana-pubkey.workspace = true
+solana-keypair.workspace = true
+solana-signer.workspace = true
+solana-message.workspace = true
+thiserror.workspace = true
+hex = "0.4"
+solana-client = "2.3"
+solana-sdk = "2.3"
+borsh = "1.5"
+anchor-client = { version = "0.32", features = ["async"] }
+anchor-lang = "0.31.1"
+serde_json = "1.0"
+solana-sha256-hasher.workspace = true
+spl-token = { version = "6.0", features = ["no-entrypoint"] }
+
+[dev-dependencies]
+test-log.workspace = true
+solana-system-interface.workspace = true
+tokio = { version = "1.0", features = ["full", "rt-multi-thread"] }
+
+[[example]]
+name = "emergency_demo"
+path = "../../examples/emergency_demo.rs"
+
+[lints]
+workspace = true
+
+[[test]]
+name = "l1_integration_test"
+path = "../../tests/l1_integration_test.rs"
+
+[[test]]
+name = "l1_test"
+path = "../../tests/l1_test.rs"
+
+
+[[test]]
+name = "emergency_withdrawal_demo"
+path = "../../tests/emergency_withdrawal_demo.rs"
+
+[[test]]
+name = "bench_test"
+path = "../../tests/bench_test.rs"
+
+[[test]]
+name = "complete_flow_test"
+path = "../../tests/complete_flow_test.rs"
+
+[[test]]
+name = "usdc_timelock_test"
+path = "../../tests/usdc_timelock_test.rs"
+
+[[test]]
+name = "contract_test"
+path = "../../tests/contract_test.rs"
+
+[[test]]
+name = "comprehensive_bench_test"
+path = "../../tests/comprehensive_bench_test.rs"
